@@ -10,22 +10,34 @@ local function safe_resume(...)
 end
 
 --- @generic T
---- @param fn fun(resolve: Resolve<T>, ...: any): nil
+--- @param callback fun(resolve: Resolve<T>): nil
+--- @return Promise<T>
+M.new_promise = function(callback)
+  return function(resolve)
+    callback(resolve)
+  end
+end
+
+--- @generic T
+--- @param fn fun(...: any): T
 --- @return fun(...: any): Promise<T>
-local async = function(fn)
+M.async = function(fn)
   return function(...)
     local args = { ..., }
     return function(resolve)
-      local thread = coroutine.create(fn)
-      safe_resume(thread, resolve, unpack(args))
+      local thread = coroutine.create(function()
+        local results = { fn(unpack(args)), }
+        resolve(unpack(results))
+      end)
+      safe_resume(thread)
     end
   end
 end
 
---- @param fn fun(resolve: Resolve<any>, ...: any): nil
-M.unwaited_async = function(fn)
+--- @param fn fun(...: any): any
+M.spawn = function(fn)
   return function(...)
-    local promise = async(fn)(...)
+    local promise = M.async(fn)(...)
     promise(function() end)
   end
 end
@@ -46,12 +58,12 @@ end
 --- @field threshold_ns? number
 --- @field should_cancel? fun():boolean
 
-M.throttled_iterator = async(
 --- @generic InvariantState, ControlVar
 --- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
 --- @param on_iteration fun(control_var: ControlVar, ...):nil
 --- @param opts? ThrottledIteratorOpts
-  function(resolve, iterator_factory, on_iteration, opts)
+M.throttled_iterator = function(iterator_factory, on_iteration, opts)
+  return M.new_promise(function(resolve)
     opts = opts or {}
     local threshold_ns = opts.threshold_ns or (10 * 1000000)
     local should_cancel = opts.should_cancel or (function() return false end)
@@ -94,6 +106,7 @@ M.throttled_iterator = async(
 
     safe_resume(coroutine.create(process))
   end)
+end
 
 --- @param level vim.log.levels
 --- @param msg string
