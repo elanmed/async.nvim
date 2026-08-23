@@ -56,7 +56,8 @@ T["await()"]["works inside async function"] = function()
       return M.await(inner_promise)
     end)
 
-    local result, done = nil, false
+    local result = nil
+    local done = false
     coroutine.wrap(function()
       result = { M.await(promise()), }
       done = true
@@ -105,9 +106,51 @@ end
 
 T["throttled_iterator()"] = new_set()
 
-T["throttled_iterator()"]["iterates over all values"] = function() end
+T["throttled_iterator()"]["iterates over all values"] = function()
+  eq(child.lua_func(function()
+    local seen = {}
+    local done = false
 
-T["throttled_iterator()"]["calls on_iteration with control variable"] = function() end
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 3 then return n + 1 end
+        end, nil, 0
+      end,
+      function(n)
+        seen[#seen + 1] = n
+      end
+    )
+
+    local resolve = function() done = true end
+    promise(resolve)
+    vim.wait(10, function() return done end)
+    return seen
+  end), { 1, 2, 3, })
+end
+
+T["throttled_iterator()"]["calls on_iteration with control variable"] = function()
+  eq(child.lua_func(function()
+    local calls = {}
+    local done = false
+
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 2 then return n + 1, "x" .. (n + 1) end
+        end, nil, 0
+      end,
+      function(control_var, extra)
+        calls[#calls + 1] = { control_var, extra, }
+      end
+    )
+
+    local resolve = function() done = true end
+    promise(resolve)
+    vim.wait(10, function() return done end)
+    return calls
+  end), { { 1, "x1", }, { 2, "x2", }, })
+end
 
 T["throttled_iterator()"]["respects threshold_ns"] = function() end
 
@@ -121,7 +164,8 @@ T["integration"] = new_set()
 
 T["integration"]["awaits async and callback promises inside spawn"] = function()
   eq(child.lua_func(function()
-    local result, done = nil, false
+    local result = nil
+    local done = false
 
     local add = M.async(function(a, b)
       return a + b
