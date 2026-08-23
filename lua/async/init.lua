@@ -3,7 +3,7 @@ local M = {}
 --- @alias Resolve<T> fun(...: T): nil
 --- @alias Promise<T> fun(resolve: Resolve<T>): nil
 --- @alias AsyncFn<T> fun(...: any): Promise<T>
---- @alias Async<T> fun(fn: fun(...: any): T): AsyncFn<T>
+--- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
 --- @alias SpawnFn fun(...: any): nil
 --- @alias Spawn fun(fn: fun(...: any): any): SpawnFn
 
@@ -15,7 +15,7 @@ end
 --- @generic T
 --- @param callback fun(resolve: Resolve<T>): nil
 --- @return Promise<T>
-M.new_promise = function(callback)
+M.from_executor = function(callback)
   return function(resolve)
     callback(resolve)
   end
@@ -24,7 +24,7 @@ end
 --- @generic T
 --- @param fn fun(...: any): T
 --- @return AsyncFn<T>
-M.async = function(fn)
+M.make_async = function(fn)
   return function(...)
     local args = { ..., }
     return function(resolve)
@@ -40,7 +40,7 @@ end
 --- @type Spawn
 M.spawn = function(fn)
   return function(...)
-    local promise = M.async(fn)(...)
+    local promise = M.make_async(fn)(...)
     promise(function() end)
   end
 end
@@ -66,7 +66,7 @@ end
 --- @param on_iteration fun(control_var: ControlVar, ...):nil
 --- @param opts? ThrottledIteratorOpts
 M.throttled_iterator = function(iterator_factory, on_iteration, opts)
-  local promise = M.async(function()
+  local promise = M.make_async(function()
     opts = opts or {}
     local threshold_ns = opts.threshold_ns or (10 * 1000000)
     local should_cancel = opts.should_cancel or (function() return false end)
