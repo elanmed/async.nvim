@@ -7,12 +7,25 @@ A tiny set of async primitives for Neovim plugins. ~125 lines of source code, ~4
 In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` and (optional) `reject` callback:
 
 ```lua
+--- @alias Resolve<T> fun(...: T): nil
+--- @alias Reject fun(err: any): nil
+--- @alias Promise<T> fun(resolve: Resolve<T>, reject?: Reject): nil
+```
+
+```lua
 local promise = function(resolve, reject)
   resolve(42)
 end
 ```
 
 `from_executor` helps formalize the idea:
+
+```lua
+--- @generic T
+--- @param executor fun(resolve: Resolve<T>, reject?: Reject): nil
+--- @return Promise<T>
+M.from_executor = function(executor)
+```
 
 ```lua
 local promise = from_executor(function(resolve)
@@ -46,6 +59,16 @@ In this plugin, I apply the same two properties to our async functions (the retu
 
 `make_async` takes a plain function and returns an async function — one that returns a promise.
 
+```
+--- @alias AsyncFn<T> fun(...: any): Promise<T>
+--- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
+
+--- @generic T
+--- @param fn fun(...: any): T
+--- @return AsyncFn<T>
+M.make_async = function(fn)
+```
+
 ```lua
 local add = make_async(function(a, b)
   return a + b
@@ -57,6 +80,13 @@ local promise = add(3, 4)
 ## `await`
 
 `await` takes a promise and returns its resolved value. It must run inside a coroutine — that's property #2 from above:
+
+```lua
+--- @generic T
+--- @param promise Promise<T>
+--- @return T
+M.await = function(promise)
+```
 
 ```lua
 local add = make_async(function(a, b)
@@ -78,6 +108,14 @@ end)
 ## `make_spawn`
 
 `make_spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
+
+```lua
+--- @alias SpawnFn fun(...: any): nil
+--- @alias MakeSpawn fun(fn: fun(...: any): any): SpawnFn
+
+--- @type MakeSpawn
+M.make_spawn = function(fn)
+```
 
 ```lua
 local spawn = make_spawn(function()
@@ -177,8 +215,6 @@ For processing large lists without blocking the UI, `throttled_iterator` iterate
 --- @param opts ThrottledIteratorOpts<ControlVar>
 --- @return Promise<nil>
 M.throttled_iterator = function(iterator_factory, opts)
--- ...
-end
 ```
 
 Example:
