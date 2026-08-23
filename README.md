@@ -1,13 +1,13 @@
 # async.nvim
 
-A tiny set of async primitives for Neovim plugins. ~100 lines of source code, ~300 lines of tests.
+A tiny set of async primitives for Neovim plugins. ~100 lines of source code, ~450 lines of tests.
 
 ## Promises as functions
 
-In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` callback:
+In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` callback and an optional `reject` callback for errors:
 
 ```lua
-local promise = function(resolve)
+local promise = function(resolve, reject)
   resolve(42)
 end
 ```
@@ -29,6 +29,8 @@ local promise = from_executor(function(resolve)
   end, 100)
 end)
 ```
+
+If an async function throws, its promise rejects with that error, and `await` re-raises it so it can be caught with `pcall` inside another async function.
 
 ## Async functions
 
@@ -71,18 +73,18 @@ local compute = make_async(function()
 end)
 ```
 
-## `spawn`
+## `make_spawn`
 
-`spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
+`make_spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
 
 ```lua
-local run = spawn(function()
+local run = make_spawn(function()
   vim.print(await(compute())) -- 14
 end)
 run()
 ```
 
-In other words: `make_async` gives you a promise to await, `spawn` is fire-and-forget.
+In other words: `make_async` gives you a promise to await, `make_spawn` is fire-and-forget.
 
 ## `throttled_iterator`
 
