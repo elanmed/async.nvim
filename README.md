@@ -76,10 +76,10 @@ end)
 `spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
 
 ```lua
-local spawned = spawn(function()
+local run = spawn(function()
   vim.print(await(compute())) -- 14
 end)
-spawned()
+run()
 ```
 
 In other words: `make_async` gives you a promise to await, `spawn` is fire-and-forget.
