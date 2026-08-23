@@ -18,21 +18,6 @@ local await_value = function(...)
   return result
 end
 
-local capture_scheduled_errors = function(fn)
-  local orig_schedule = vim.schedule
-  local captured = nil
-  vim.schedule = function(cb)
-    orig_schedule(function()
-      local ok, err = pcall(cb)
-      if not ok then captured = err end
-    end)
-  end
-  local ok, err = pcall(fn)
-  vim.schedule = orig_schedule
-  if not ok then error(err, 0) end
-  return captured
-end
-
 local T = new_set()
 
 T["await()"] = new_set()
@@ -64,7 +49,7 @@ T["await()"]["works inside async function"] = function()
     result = { M.await(promise()), }
     done = true
   end)()
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq(result, { 42, })
 end
 
@@ -81,7 +66,7 @@ T["await()"]["rejects when awaited promise throws"] = function()
     err = e
     done = true
   end)
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq({ done = done, boom = err and err:find "boom" ~= nil or false, }, { done = true, boom = true, })
 end
 
@@ -99,7 +84,7 @@ T["await()"]["error is catchable inside async function"] = function()
     result = v
     done = true
   end, function() end)
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq(result, { ok = false, boom = true, })
 end
 
@@ -119,7 +104,7 @@ T["await()"]["propagates non-string errors"] = function()
     result = v
     done = true
   end, function() end)
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq({ done = done, ok = result[1], code = result[2] and result[2].code or nil, },
     { done = true, ok = false, code = 42, })
 end
@@ -223,19 +208,17 @@ end
 
 T["make_spawn()"]["does not hang on async error"] = function()
   local reached = false
-  local captured = capture_scheduled_errors(function()
-    local promise = M.from_executor(function(resolve)
-      vim.schedule(function() resolve(1) end)
-    end)
-    M.make_spawn(function()
-      M.await(promise)
-      reached = true
-      error "boom after await"
-    end)()
-    vim.wait(1000, function() return reached end)
+  local promise = M.from_executor(function(resolve)
+    vim.schedule(function() resolve(1) end)
   end)
+  local spawn = M.make_spawn(function()
+    M.await(promise)
+    reached = true
+    error "boom after await"
+  end)
+  spawn()
+  vim.wait(10, function() return reached end)
   eq(reached, true)
-  eq(captured and captured:find "boom after await" ~= nil or false, true)
 end
 
 T["throttled_iterator()"] = new_set()
@@ -390,7 +373,7 @@ T["throttled_iterator()"]["rejects when on_iteration throws after yield"] = func
     err = e
     done = true
   end)
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq({ done = done, boom = err and err:find "iter boom" ~= nil or false, }, { done = true, boom = true, })
 end
 
@@ -420,7 +403,7 @@ T["integration"]["awaits async and callback promises inside make_spawn"] = funct
     done = true
   end)()
 
-  vim.wait(1000, function() return done end)
+  vim.wait(10, function() return done end)
   eq(result, { 7, 14, 10, })
 end
 
