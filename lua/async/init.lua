@@ -18,12 +18,12 @@ local function default_reject(err)
 end
 
 --- @generic T
---- @param callback fun(resolve: Resolve<T>, reject?: Reject): nil
+--- @param executor fun(resolve: Resolve<T>, reject?: Reject): nil
 --- @return Promise<T>
-M.from_executor = function(callback)
+M.from_executor = function(executor)
   return function(resolve, reject)
     reject = reject or default_reject
-    local ok, err = pcall(callback, resolve, reject)
+    local ok, err = pcall(executor, resolve, reject)
     if not ok then reject(err) end
   end
 end
