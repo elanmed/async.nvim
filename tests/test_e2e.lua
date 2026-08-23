@@ -10,7 +10,7 @@ local await_value = function(...)
     local args = { ..., }
 
     coroutine.wrap(function()
-      local promise = M.new_promise(function(resolve) resolve(unpack(args)) end)
+      local promise = M.from_executor(function(resolve) resolve(unpack(args)) end)
       result = { M.await(promise), }
       done = true
     end)()
@@ -42,7 +42,7 @@ end
 
 T["await()"]["errors when called outside coroutine"] = function()
   local result = child.lua_func(function()
-    local promise = M.new_promise(function(resolve) resolve(42) end)
+    local promise = M.from_executor(function(resolve) resolve(42) end)
     return { pcall(M.await, promise), }
   end)
   eq(result[1], false)
@@ -51,8 +51,8 @@ end
 
 T["await()"]["works inside async function"] = function()
   eq(child.lua_func(function()
-    local promise = M.async(function()
-      local inner_promise = M.new_promise(function(resolve) resolve(42) end)
+    local promise = M.make_async(function()
+      local inner_promise = M.from_executor(function(resolve) resolve(42) end)
       return M.await(inner_promise)
     end)
 
@@ -167,15 +167,15 @@ T["integration"]["awaits async and callback promises inside spawn"] = function()
     local result = nil
     local done = false
 
-    local add = M.async(function(a, b)
+    local add = M.make_async(function(a, b)
       return a + b
     end)
 
-    local double = M.async(function(value)
+    local double = M.make_async(function(value)
       return value * 2
     end)
 
-    local deferred = M.new_promise(function(resolve)
+    local deferred = M.from_executor(function(resolve)
       vim.schedule(function() resolve(10) end)
     end)
 
