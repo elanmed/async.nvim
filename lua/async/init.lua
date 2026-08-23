@@ -1,11 +1,12 @@
 local M = {}
 
 --- @alias Resolve<T> fun(...: T): nil
---- @alias Promise<T> fun(resolve: Resolve<T>): nil
+--- @alias Reject fun(err: any): nil
+--- @alias Promise<T> fun(resolve: Resolve<T>, reject?: Reject): nil
 --- @alias AsyncFn<T> fun(...: any): Promise<T>
 --- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
 --- @alias SpawnFn fun(...: any): nil
---- @alias Spawn fun(fn: fun(...: any): any): SpawnFn
+--- @alias MakeSpawn fun(fn: fun(...: any): any): SpawnFn
 
 local function safe_resume(...)
   local ok, err = coroutine.resume(...)
@@ -13,11 +14,11 @@ local function safe_resume(...)
 end
 
 --- @generic T
---- @param callback fun(resolve: Resolve<T>): nil
+--- @param callback fun(resolve: Resolve<T>, reject?: Reject): nil
 --- @return Promise<T>
 M.from_executor = function(callback)
-  return function(resolve)
-    callback(resolve)
+  return function(resolve, reject)
+    callback(resolve, reject)
   end
 end
 
@@ -27,21 +28,26 @@ end
 M.make_async = function(fn)
   return function(...)
     local args = { ..., }
-    return function(resolve)
+    return function(resolve, reject)
+      reject = reject or function(err) error(err) end
       local thread = coroutine.create(function()
-        local results = { fn(unpack(args)), }
-        resolve(unpack(results))
+        local results = { pcall(fn, unpack(args)), }
+        if results[1] then
+          resolve(unpack(results, 2))
+        else
+          reject(results[2])
+        end
       end)
       safe_resume(thread)
     end
   end
 end
 
---- @type Spawn
-M.spawn = function(fn)
+--- @type MakeSpawn
+M.make_spawn = function(fn)
   return function(...)
     local promise = M.make_async(fn)(...)
-    promise(function() end)
+    promise(function() end, function(err) error(err) end)
   end
 end
 
@@ -52,9 +58,14 @@ M.await = function(promise)
   local thread = coroutine.running()
   assert(thread ~= nil, "[async.nvim] `await` can only be called in a coroutine")
   local scheduled_promise = vim.schedule_wrap(promise)
-  local resolve = vim.schedule_wrap(function(...) safe_resume(thread, ...) end)
-  scheduled_promise(resolve)
-  return coroutine.yield()
+  local resolve = vim.schedule_wrap(function(...) safe_resume(thread, true, ...) end)
+  local reject = vim.schedule_wrap(function(err) safe_resume(thread, false, err) end)
+  scheduled_promise(resolve, reject)
+  local results = { coroutine.yield(), }
+  if not results[1] then
+    error(results[2], 0)
+  end
+  return unpack(results, 2)
 end
 
 --- @class ThrottledIteratorOpts
