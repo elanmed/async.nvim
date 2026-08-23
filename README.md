@@ -1,6 +1,6 @@
 # async.nvim
 
-A tiny set of async primitives for Neovim plugins. ~100 lines of source code, ~450 lines of tests.
+A tiny set of async primitives for Neovim plugins. ~100 lines of source code, ~400 lines of tests.
 
 ## Promises as functions
 
