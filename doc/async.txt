@@ -1,8 +1,144 @@
 *async.txt*                                        Last change: 2026 August 23
 
 ==============================================================================
-`ASYNC.NVIM`                                                *async-async.nvim*
+Table of Contents                                    *async-table-of-contents*
+
+Promises as functions .......................... |async-promises-as-functions|
+Async functions ...................................... |async-async-functions|
+`make_async` .............................................. |async-make_async|
+`await` ........................................................ |async-await|
+`spawn` ........................................................ |async-spawn|
+`throttled_iterator` .............................. |async-throttled_iterator|
+
+==============================================================================
+ASYNC.NVIM                                                  *async-async.nvim*
 
 
+A tiny set of async primitives for Neovim plugins. ~100 lines of source code,
+~300 lines of tests.
+
+
+------------------------------------------------------------------------------
+PROMISES AS FUNCTIONS                            *async-promises-as-functions*
+
+
+In JavaScript, a promise is an object. In this plugin, I define a promise as a
+function that takes a `resolve` callback:
+
+>lua
+    local promise = function(resolve)
+      resolve(42)
+    end
+<
+`from_executor` helps formalize the idea:
+
+>lua
+    local promise = from_executor(function(resolve)
+      resolve(42)
+    end)
+<
+And it's useful for bridging callback-style APIs:
+
+>lua
+    local promise = from_executor(function(resolve)
+      vim.defer_fn(function()
+        resolve("done")
+      end, 100)
+    end)
+<
+
+------------------------------------------------------------------------------
+ASYNC FUNCTIONS                                        *async-async-functions*
+
+
+In JavaScript, an `async` function has two properties we care about:
+
+1. It returns a promise
+2. You can use `await` inside it
+This plugin uses the same terms.
+
+
+------------------------------------------------------------------------------
+`MAKE_ASYNC`                                                *async-make_async*
+
+
+`make_async` takes a plain function and returns an async function — one that
+returns a promise and resolves with its return value (#1 from above):
+
+>lua
+    local add = make_async(function(a, b)
+      return a + b
+    end)
+    
+    local promise = add(3, 4) -- a promise
+<
+
+------------------------------------------------------------------------------
+`AWAIT`                                                          *async-await*
+
+
+`await` takes a promise and returns its resolved value. It must run inside a
+coroutine, which is exactly what `make_async` provides (#2 from above):
+
+>lua
+    local add = make_async(function(a, b)
+      return a + b
+    end)
+    
+    local double = make_async(function(value)
+      return value * 2
+    end)
+    
+    local compute = make_async(function()
+      local add_promise = add(3, 4)
+      local sum = await(add_promise)
+      return await(double(sum))
+    end)
+<
+
+------------------------------------------------------------------------------
+`SPAWN`                                                          *async-spawn*
+
+
+`spawn` also creates a coroutine so you can use `await`, but it runs the
+function immediately and discards the result:
+
+>lua
+    local run = spawn(function()
+      vim.print(await(compute())) -- 14
+    end)
+    run()
+<
+In other words: `make_async` gives you a promise to await, `spawn` is
+fire-and-forget.
+
+
+------------------------------------------------------------------------------
+`THROTTLED_ITERATOR`                                *async-throttled_iterator*
+
+
+For processing large lists without blocking the UI, `throttled_iterator`
+iterates in batches and yields back to the main thread between batches:
+
+>lua
+    local promise = throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 3 then return n + 1 end
+        end, nil, 0
+      end,
+      function(n)
+        vim.print(n)
+      end
+    )
+    
+    promise(function()
+      vim.print("done")
+    end)
+<
+Options:
+
+- `threshold_ns`: how long to process before yielding (default: 10ms)
+- `should_cancel`: a function returning `true` to stop early
 
 vim:tw=78:ts=8:ft=help:norl:

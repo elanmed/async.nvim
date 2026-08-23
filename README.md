@@ -1,6 +1,6 @@
 # async.nvim
 
-A tiny, dependency-free set of async primitives for Neovim plugins. Includes promises, async functions, spawn, and a throttled iterator.
+A tiny set of async primitives for Neovim plugins. ~100 lines of source code, ~300 lines of tests.
 
 ## Promises as functions
 
