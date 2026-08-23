@@ -57,13 +57,14 @@ end
 T["await()"]["rejects when awaited promise throws"] = function()
   local bad_async_fn = M.make_async(function() error "boom" end)
   local outer_async_fn = M.make_async(function()
-    return M.await(bad_async_fn())
+    local bad_promise = bad_async_fn()
+    return M.await(bad_promise)
   end)
 
   local err = nil
   local done = false
-  local promise = outer_async_fn()
-  promise(function() end, function(e)
+  local outer_promise = outer_async_fn()
+  outer_promise(function() end, function(e)
     err = e
     done = true
   end)
@@ -74,14 +75,15 @@ end
 T["await()"]["error is catchable inside async function"] = function()
   local bad_async_fn = M.make_async(function() error "boom" end)
   local outer_async_fn = M.make_async(function()
-    local ok, err = pcall(M.await, bad_async_fn())
+    local bad_promise = bad_async_fn()
+    local ok, err = pcall(M.await, bad_promise)
     return { ok = ok, boom = err and err:find "boom" ~= nil or false, }
   end)
 
   local result = nil
   local done = false
-  local promise = outer_async_fn()
-  promise(function(v)
+  local outer_promise = outer_async_fn()
+  outer_promise(function(v)
     result = v
     done = true
   end, function() end)
@@ -100,8 +102,8 @@ T["await()"]["propagates non-string errors"] = function()
 
   local result = nil
   local done = false
-  local promise = outer_async_fn()
-  promise(function(v)
+  local outer_promise = outer_async_fn()
+  outer_promise(function(v)
     result = v
     done = true
   end, function() end)
@@ -140,8 +142,8 @@ T["make_async()"]["resolves with return value"] = function()
   local value = nil
   local done = false
   local add_async_fn = M.make_async(function(a, b) return a + b end)
-  local promise = add_async_fn(3, 4)
-  promise(function(v)
+  local add_promise = add_async_fn(3, 4)
+  add_promise(function(v)
     value = v
     done = true
   end)
@@ -164,8 +166,8 @@ T["make_async()"]["rejects when fn throws"] = function()
   local err = nil
   local done = false
   local bad_async_fn = M.make_async(function() error "boom" end)
-  local promise = bad_async_fn()
-  promise(function() end, function(e)
+  local bad_promise = bad_async_fn()
+  bad_promise(function() end, function(e)
     err = e
     done = true
   end)
@@ -174,8 +176,8 @@ end
 
 T["make_async()"]["rethrows when no reject passed"] = function()
   local bad_async_fn = M.make_async(function() error "boom" end)
-  local promise = bad_async_fn()
-  local result = { pcall(promise, function() end), }
+  local bad_promise = bad_async_fn()
+  local result = { pcall(bad_promise, function() end), }
   eq(result[1], false)
   eq(result[2]:find "boom" ~= nil, true)
 end
@@ -401,8 +403,10 @@ T["integration"]["awaits async and callback promises inside make_spawn"] = funct
   end)
 
   local spawn = M.make_spawn(function()
-    local sum = M.await(add_async_fn(3, 4))
-    local doubled = M.await(double_async_fn(sum))
+    local add_promise = add_async_fn(3, 4)
+    local sum = M.await(add_promise)
+    local double_promise = double_async_fn(sum)
+    local doubled = M.await(double_promise)
     local extra = M.await(deferred)
     result = { sum, doubled, extra, }
     done = true
