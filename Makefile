@@ -12,7 +12,7 @@ test:
 
 snapshot:
 	mkdir -p dist
-	commit=$$(git rev-parse --short HEAD); \
+	commit=$$(git rev-parse HEAD); \
 	sed "1i-- async.nvim @ $$commit" lua/async/init.lua > dist/async.lua
 
 lint:
