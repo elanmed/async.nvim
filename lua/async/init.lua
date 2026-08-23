@@ -13,12 +13,18 @@ local function safe_resume(...)
   if not ok then error(err) end
 end
 
+local function default_reject(err)
+  error(err)
+end
+
 --- @generic T
 --- @param callback fun(resolve: Resolve<T>, reject?: Reject): nil
 --- @return Promise<T>
 M.from_executor = function(callback)
   return function(resolve, reject)
-    callback(resolve, reject)
+    reject = reject or default_reject
+    local ok, err = pcall(callback, resolve, reject)
+    if not ok then reject(err) end
   end
 end
 
@@ -29,7 +35,7 @@ M.make_async = function(fn)
   return function(...)
     local args = { ..., }
     return function(resolve, reject)
-      reject = reject or function(err) error(err) end
+      reject = reject or default_reject
       local thread = coroutine.create(function()
         local results = { pcall(fn, unpack(args)), }
         if results[1] then
@@ -47,7 +53,7 @@ end
 M.make_spawn = function(fn)
   return function(...)
     local promise = M.make_async(fn)(...)
-    promise(function() end, function(err) error(err) end)
+    promise(function() end, default_reject)
   end
 end
 
