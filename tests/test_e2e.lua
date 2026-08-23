@@ -67,41 +67,196 @@ T["await()"]["works inside async function"] = function()
   end), { 42, })
 end
 
-T["spawn()"] = new_set()
+T["await()"]["rejects when awaited promise throws"] = function()
+  eq(child.lua_func(function()
+    local bad = M.make_async(function() error "boom" end)
+    local outer = M.make_async(function()
+      return M.await(bad())
+    end)
 
-T["spawn()"]["executes async function immediately"] = function()
+    local err = nil
+    local done = false
+    local promise = outer()
+    promise(function() end, function(e)
+      err = e
+      done = true
+    end)
+    vim.wait(1000, function() return done end)
+    return { done = done, boom = err and err:find "boom" ~= nil or false, }
+  end), { done = true, boom = true, })
+end
+
+T["await()"]["error is catchable inside async function"] = function()
+  eq(child.lua_func(function()
+    local bad = M.make_async(function() error "boom" end)
+    local outer = M.make_async(function()
+      local ok, err = pcall(M.await, bad())
+      return { ok = ok, boom = err and err:find "boom" ~= nil or false, }
+    end)
+
+    local result = nil
+    local done = false
+    local promise = outer()
+    promise(function(v)
+      result = v
+      done = true
+    end, function() end)
+    vim.wait(1000, function() return done end)
+    return result
+  end), { ok = false, boom = true, })
+end
+
+T["await()"]["propagates non-string errors"] = function()
+  eq(child.lua_func(function()
+    local sentinel = { code = 42, }
+    local bad = M.from_executor(function(_, reject)
+      vim.schedule(function() reject(sentinel) end)
+    end)
+    local outer = M.make_async(function()
+      return { pcall(M.await, bad), }
+    end)
+
+    local result = nil
+    local done = false
+    local promise = outer()
+    promise(function(v)
+      result = v
+      done = true
+    end, function() end)
+    vim.wait(1000, function() return done end)
+    return { done = done, ok = result[1], code = result[2] and result[2].code or nil, }
+  end), { done = true, ok = false, code = 42, })
+end
+
+T["from_executor()"] = new_set()
+
+T["from_executor()"]["resolves synchronously"] = function()
+  eq(child.lua_func(function()
+    local value = nil
+    local done = false
+    local promise = M.from_executor(function(resolve) resolve(42) end)
+    promise(function(v)
+      value = v
+      done = true
+    end)
+    return { done = done, value = value, }
+  end), { done = true, value = 42, })
+end
+
+T["from_executor()"]["passes reject callback"] = function()
+  eq(child.lua_func(function()
+    local err = nil
+    local done = false
+    local promise = M.from_executor(function(_, reject) reject "nope" end)
+    promise(function() end, function(e)
+      err = e
+      done = true
+    end)
+    return { done = done, msg = err, }
+  end), { done = true, msg = "nope", })
+end
+
+T["make_async()"] = new_set()
+
+T["make_async()"]["resolves with return value"] = function()
+  eq(child.lua_func(function()
+    local value = nil
+    local done = false
+    local promise = M.make_async(function(a, b) return a + b end)(3, 4)
+    promise(function(v)
+      value = v
+      done = true
+    end)
+    return { done = done, value = value, }
+  end), { done = true, value = 7, })
+end
+
+T["make_async()"]["resolves with multiple return values"] = function()
+  eq(child.lua_func(function()
+    local values = nil
+    local done = false
+    local promise = M.make_async(function() return 1, 2, 3 end)()
+    promise(function(...)
+      values = { ..., }
+      done = true
+    end)
+    return { done = done, values = values, }
+  end), { done = true, values = { 1, 2, 3, }, })
+end
+
+T["make_async()"]["rejects when fn throws"] = function()
+  eq(child.lua_func(function()
+    local err = nil
+    local done = false
+    local promise = M.make_async(function() error "boom" end)()
+    promise(function() end, function(e)
+      err = e
+      done = true
+    end)
+    return { done = done, boom = err and err:find "boom" ~= nil or false, }
+  end), { done = true, boom = true, })
+end
+
+T["make_async()"]["rethrows when no reject passed"] = function()
+  local result = child.lua_func(function()
+    local promise = M.make_async(function() error "boom" end)()
+    return { pcall(promise, function() end), }
+  end)
+  eq(result[1], false)
+  eq(result[2]:find "boom" ~= nil, true)
+end
+
+T["make_spawn()"] = new_set()
+
+T["make_spawn()"]["executes async function immediately"] = function()
   eq(child.lua_func(function()
     local result = nil
-    local spawned = M.spawn(function()
+    local spawn = M.make_spawn(function()
       result = 42
     end)
-    spawned()
+    spawn()
     return result
   end), 42)
 end
 
-T["spawn()"]["passes arguments to async function"] = function()
+T["make_spawn()"]["passes arguments to async function"] = function()
   eq(child.lua_func(function()
     local result = nil
-    local spawned = M.spawn(function(a, b)
+    local spawn = M.make_spawn(function(a, b)
       result = { a, b, }
     end)
-    spawned(1, 2)
+    spawn(1, 2)
     return result
   end), { 1, 2, })
 end
 
-T["spawn()"]["propagates errors"] = function()
+T["make_spawn()"]["propagates errors"] = function()
   local result = child.lua_func(function()
     return { pcall(function()
-      local spawned = M.spawn(function()
+      local spawn = M.make_spawn(function()
         error "boom"
       end)
-      spawned()
+      spawn()
     end), }
   end)
   eq(result[1], false)
   eq(result[2]:find "boom" ~= nil, true)
+end
+
+T["make_spawn()"]["does not hang on async error"] = function()
+  eq(child.lua_func(function()
+    local reached = false
+    local promise = M.from_executor(function(resolve)
+      vim.schedule(function() resolve(1) end)
+    end)
+    M.make_spawn(function()
+      M.await(promise)
+      reached = true
+      error "boom after await"
+    end)()
+    vim.wait(1000, function() return reached end)
+    return reached
+  end), true)
 end
 
 T["throttled_iterator()"] = new_set()
@@ -250,9 +405,33 @@ T["throttled_iterator()"]["resolves when cancelled"] = function()
   end), true)
 end
 
+T["throttled_iterator()"]["rejects when on_iteration throws after yield"] = function()
+  eq(child.lua_func(function()
+    local err = nil
+    local done = false
+
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 1 then return n + 1 end
+        end, nil, 0
+      end,
+      function() error "iter boom" end,
+      { threshold_ns = 0, }
+    )
+
+    promise(function() end, function(e)
+      err = e
+      done = true
+    end)
+    vim.wait(1000, function() return done end)
+    return { done = done, boom = err and err:find "iter boom" ~= nil or false, }
+  end), { done = true, boom = true, })
+end
+
 T["integration"] = new_set()
 
-T["integration"]["awaits async and callback promises inside spawn"] = function()
+T["integration"]["awaits async and callback promises inside make_spawn"] = function()
   eq(child.lua_func(function()
     local result = nil
     local done = false
@@ -269,7 +448,7 @@ T["integration"]["awaits async and callback promises inside spawn"] = function()
       vim.schedule(function() resolve(10) end)
     end)
 
-    M.spawn(function()
+    M.make_spawn(function()
       local sum = M.await(add(3, 4))
       local doubled = M.await(double(sum))
       local extra = M.await(deferred)
