@@ -1,0 +1,8 @@
+*async.txt*                                        Last change: 2026 August 23
+
+==============================================================================
+`ASYNC.NVIM`                                                *async-async.nvim*
+
+
+
+vim:tw=78:ts=8:ft=help:norl:
