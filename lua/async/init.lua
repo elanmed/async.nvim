@@ -46,7 +46,7 @@ end
 --- @field threshold_ns? number
 --- @field should_cancel? fun():boolean
 
-M.throttled_iterator = M.async(
+M.throttled_iterator = async(
 --- @generic InvariantState, ControlVar
 --- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
 --- @param on_iteration fun(control_var: ControlVar, ...):nil
