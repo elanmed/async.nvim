@@ -82,13 +82,14 @@ end
 --- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
 --- @param on_iteration fun(control_var: ControlVar, ...):nil
 --- @param opts? ThrottledIteratorOpts
+--- @return Promise<nil>
 M.throttled_iterator = function(iterator_factory, on_iteration, opts)
-  local promise = M.make_async(function()
+  local async_fn = M.make_async(function()
     opts = opts or {}
     local threshold_ns = opts.threshold_ns or (10 * 1000000)
     local should_cancel = opts.should_cancel or (function() return false end)
 
-    local function create_throttle()
+    local function make_throttle()
       local last_yield = vim.uv.hrtime()
       return function()
         local now = vim.uv.hrtime()
@@ -101,7 +102,7 @@ M.throttled_iterator = function(iterator_factory, on_iteration, opts)
       end
     end
 
-    local maybe_pause = create_throttle()
+    local maybe_pause = make_throttle()
     local iter_fn, invariant_state, control_var = iterator_factory()
     while true do
       if should_cancel() then
@@ -119,7 +120,8 @@ M.throttled_iterator = function(iterator_factory, on_iteration, opts)
       on_iteration(unpack(values))
     end
   end)
-  return promise()
+  local promise = async_fn()
+  return promise
 end
 
 return M
