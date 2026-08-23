@@ -2,7 +2,7 @@
 
 A tiny, dependency-free set of async primitives for Neovim plugins. Includes promises, async functions, spawn, and a throttled iterator.
 
-## Promises are functions
+## Promises as functions
 
 In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` callback:
 
@@ -30,11 +30,18 @@ local promise = from_executor(function(resolve)
 end)
 ```
 
+## Async functions
+
+In JavaScript, an `async` function has two capabilities that interest us:
+
+1. It returns a promise
+2. Within the `async` function, you can use the `await` keyword
+
+We'll use the same terminology in this plugin.
+
 ## `make_async`
 
-In JavaScript, an `async` function is one which returns a promise - we'll use the same terminology here.
-
-`make_async` takes a callback argument and transforms it, returning a new function. This new function is async - it returns (my definition of) a promise.
+`make_async` takes a callback argument and transforms it, returning a new function. This new function is async - it returns a promise (matching #1 from above)
 
 ```lua
 local add = make_async(function(a, b)
@@ -46,7 +53,7 @@ local promise = add(3, 4) -- a promise
 
 ## `await`
 
-`await` takes a promise and returns its resolved value. It must be called inside a coroutine — which is exactly what `make_async` provides:
+`await` takes a promise and returns its resolved value. It must be called inside a coroutine — which is something else which `make_async` provides (matching #2 from above):
 
 ```lua
 local add = make_async(function(a, b)
@@ -58,27 +65,31 @@ local double = make_async(function(value)
 end)
 
 local compute = make_async(function()
-  local sum = await(add(3, 4))
-  return await(double(sum))
+  local add_promise = add(3, 4)
+  local sum = await(add_promise)
+  local double_promise = double(sum)
+  return await(double_promise)
 end)
-```
-
-`compute()` returns a promise. To run it and do something with the result, use `spawn`:
-
-```lua
-spawn(function()
-  vim.print(await(compute())) -- 14
-end)()
 ```
 
 ## spawn
 
+To create a coroutine which `await` can be called in, but avoid returning a promise, you can use `spawn`:
+
+```lua
+local spawned = spawn(function()
+  vim.print(await(compute())) -- 14
+end)
+spawned()
+```
+
 `spawn` runs an async function immediately and discards the result:
 
 ```lua
-spawn(function()
+local spawned = spawn(function()
   vim.print("hello")
-end)()
+end)
+spawned()
 ```
 
 It's the fire-and-forget primitive: `make_async` returns an async function; calling it returns a promise for you to await. `spawn` starts the coroutine and moves on.
@@ -99,7 +110,7 @@ local promise = throttled_iterator(
   end
 )
 
-promise(function()
+promise(function(resolve)
   vim.print("done")
 end)
 ```
