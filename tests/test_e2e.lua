@@ -152,13 +152,103 @@ T["throttled_iterator()"]["calls on_iteration with control variable"] = function
   end), { { 1, "x1", }, { 2, "x2", }, })
 end
 
-T["throttled_iterator()"]["respects threshold_ns"] = function() end
+T["throttled_iterator()"]["respects threshold_ns"] = function()
+  eq(child.lua_func(function()
+    local seen = {}
+    local done = false
 
-T["throttled_iterator()"]["cancels when should_cancel returns true"] = function() end
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 3 then return n + 1 end
+        end, nil, 0
+      end,
+      function(n)
+        seen[#seen + 1] = n
+      end,
+      { threshold_ns = 0, }
+    )
 
-T["throttled_iterator()"]["resolves when iteration completes"] = function() end
+    local resolve = function() done = true end
+    promise(resolve)
+    local immediate_count = #seen
+    local immediate_done = done
+    vim.wait(10, function() return done end)
+    return {
+      immediate_count = immediate_count,
+      immediate_done = immediate_done,
+      final_count = #seen,
+      final_done = done,
+    }
+  end), { immediate_count = 0, immediate_done = false, final_count = 3, final_done = true, })
+end
 
-T["throttled_iterator()"]["resolves when cancelled"] = function() end
+T["throttled_iterator()"]["cancels when should_cancel returns true"] = function()
+  eq(child.lua_func(function()
+    local seen = {}
+    local done = false
+    local count = 0
+
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 5 then return n + 1 end
+        end, nil, 0
+      end,
+      function(n)
+        seen[#seen + 1] = n
+        count = count + 1
+      end,
+      { should_cancel = function() return count >= 2 end, }
+    )
+
+    local resolve = function() done = true end
+    promise(resolve)
+    vim.wait(10, function() return done end)
+    return { seen = seen, done = done, }
+  end), { seen = { 1, 2, }, done = true, })
+end
+
+T["throttled_iterator()"]["resolves when iteration completes"] = function()
+  eq(child.lua_func(function()
+    local done = false
+
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 3 then return n + 1 end
+        end, nil, 0
+      end,
+      function() end
+    )
+
+    local resolve = function() done = true end
+    promise(resolve)
+    vim.wait(10, function() return done end)
+    return done
+  end), true)
+end
+
+T["throttled_iterator()"]["resolves when cancelled"] = function()
+  eq(child.lua_func(function()
+    local done = false
+
+    local promise = M.throttled_iterator(
+      function()
+        return function(_, n)
+          if n < 5 then return n + 1 end
+        end, nil, 0
+      end,
+      function() end,
+      { should_cancel = function() return true end, }
+    )
+
+    local resolve = function() done = true end
+    promise(resolve)
+    vim.wait(10, function() return done end)
+    return done
+  end), true)
+end
 
 T["integration"] = new_set()
 
