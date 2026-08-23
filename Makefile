@@ -1,4 +1,4 @@
-.PHONY: dev clean test lint docs
+.PHONY: dev clean test lint docs snapshot
 
 dev:
 	mkdir -p ~/.local/share/nvim/site/pack/dev/start/async.nvim
@@ -9,6 +9,11 @@ clean:
 
 test:
 	nvim --headless --noplugin -u ./scripts/minimal_init.lua -c "lua MiniTest.run()"
+
+snapshot:
+	mkdir -p dist
+	commit=$$(git rev-parse --short HEAD); \
+	sed "1i-- async.nvim @ $$commit" lua/async/init.lua > dist/async.lua
 
 lint:
 	# https://luals.github.io/#install
