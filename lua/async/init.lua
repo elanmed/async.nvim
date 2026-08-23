@@ -62,7 +62,12 @@ end
 --- @return T
 M.await = function(promise)
   local thread = coroutine.running()
-  assert(thread ~= nil, "[async.nvim] `await` can only be called in a coroutine")
+  assert(
+    thread ~= nil,
+    [[[async.nvim] `await` can only be called in a coroutine.
+    Ensure the surrounding function is wrapped in a `make_spawn` or a `make_async`]]
+  )
+
   local scheduled_promise = vim.schedule_wrap(promise)
   local resolve = vim.schedule_wrap(function(...) safe_resume(thread, true, ...) end)
   local reject = vim.schedule_wrap(function(err) safe_resume(thread, false, err) end)
@@ -74,18 +79,17 @@ M.await = function(promise)
   return unpack(results, 2)
 end
 
---- @class ThrottledIteratorOpts
---- @field threshold_ns? number
---- @field should_cancel? fun():boolean
+--- @class ThrottledIteratorOpts<ControlVar>
+--- @field threshold_ns? number The minimum time in nanoseconds between yields to the main loop. Defaults to 10ms.
+--- @field should_cancel? fun():boolean Called before each iteration; return true to stop early. Defaults to always returning false.
+--- @field on_iteration fun(control_var: ControlVar, ...):nil Called for each item with the control variable and the iterator values.
 
 --- @generic InvariantState, ControlVar
 --- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
---- @param on_iteration fun(control_var: ControlVar, ...):nil
---- @param opts? ThrottledIteratorOpts
+--- @param opts ThrottledIteratorOpts<ControlVar>
 --- @return Promise<nil>
-M.throttled_iterator = function(iterator_factory, on_iteration, opts)
+M.throttled_iterator = function(iterator_factory, opts)
   local async_fn = M.make_async(function()
-    opts = opts or {}
     local threshold_ns = opts.threshold_ns or (10 * 1000000)
     local should_cancel = opts.should_cancel or (function() return false end)
 
@@ -117,7 +121,7 @@ M.throttled_iterator = function(iterator_factory, on_iteration, opts)
         return nil
       end
 
-      on_iteration(unpack(values))
+      opts.on_iteration(unpack(values))
     end
   end)
   local promise = async_fn()
