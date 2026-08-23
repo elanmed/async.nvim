@@ -32,16 +32,16 @@ end)
 
 ## Async functions
 
-In JavaScript, an `async` function has two capabilities that interest us:
+In JavaScript, an `async` function has two properties we care about:
 
 1. It returns a promise
-2. Within the `async` function, you can use the `await` keyword
+2. You can use `await` inside it
 
-We'll use the same terminology in this plugin.
+This plugin uses the same terms.
 
 ## `make_async`
 
-`make_async` takes a callback argument and transforms it, returning a new function. This new function is async - it returns a promise (matching #1 from above)
+`make_async` takes a plain function and returns an async function — one that returns a promise and resolves with its return value (#1 from above):
 
 ```lua
 local add = make_async(function(a, b)
@@ -53,7 +53,7 @@ local promise = add(3, 4) -- a promise
 
 ## `await`
 
-`await` takes a promise and returns its resolved value. It must be called inside a coroutine — which is something else which `make_async` provides (matching #2 from above):
+`await` takes a promise and returns its resolved value. It must run inside a coroutine, which is exactly what `make_async` provides (#2 from above):
 
 ```lua
 local add = make_async(function(a, b)
@@ -67,14 +67,13 @@ end)
 local compute = make_async(function()
   local add_promise = add(3, 4)
   local sum = await(add_promise)
-  local double_promise = double(sum)
-  return await(double_promise)
+  return await(double(sum))
 end)
 ```
 
-## spawn
+## `spawn`
 
-To create a coroutine which `await` can be called in, but avoid returning a promise, you can use `spawn`:
+`spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
 
 ```lua
 local spawned = spawn(function()
@@ -83,18 +82,9 @@ end)
 spawned()
 ```
 
-`spawn` runs an async function immediately and discards the result:
+In other words: `make_async` gives you a promise to await, `spawn` is fire-and-forget.
 
-```lua
-local spawned = spawn(function()
-  vim.print("hello")
-end)
-spawned()
-```
-
-It's the fire-and-forget primitive: `make_async` returns an async function; calling it returns a promise for you to await. `spawn` starts the coroutine and moves on.
-
-## throttled_iterator
+## `throttled_iterator`
 
 For processing large lists without blocking the UI, `throttled_iterator` iterates in batches and yields back to the main thread between batches:
 
@@ -110,7 +100,7 @@ local promise = throttled_iterator(
   end
 )
 
-promise(function(resolve)
+promise(function()
   vim.print("done")
 end)
 ```
