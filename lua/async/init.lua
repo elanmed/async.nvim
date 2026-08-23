@@ -1,8 +1,11 @@
 local M = {}
 
---- @alias Resolve<T> fun(value?: T): nil
+--- @alias Resolve<T> fun(...: T): nil
 --- @alias Promise<T> fun(resolve: Resolve<T>): nil
---- @alias AsyncFn<T> fun(): Promise<T>
+--- @alias AsyncFn<T> fun(...: any): Promise<T>
+--- @alias Async<T> fun(fn: fun(...: any): T): AsyncFn<T>
+--- @alias SpawnFn fun(...: any): nil
+--- @alias Spawn fun(fn: fun(...: any): any): SpawnFn
 
 local function safe_resume(...)
   local ok, err = coroutine.resume(...)
@@ -20,7 +23,7 @@ end
 
 --- @generic T
 --- @param fn fun(...: any): T
---- @return fun(...: any): Promise<T>
+--- @return AsyncFn<T>
 M.async = function(fn)
   return function(...)
     local args = { ..., }
@@ -34,7 +37,7 @@ M.async = function(fn)
   end
 end
 
---- @param fn fun(...: any): any
+--- @type Spawn
 M.spawn = function(fn)
   return function(...)
     local promise = M.async(fn)(...)
@@ -47,7 +50,7 @@ end
 --- @return T
 M.await = function(promise)
   local thread = coroutine.running()
-  assert(thread ~= nil, "`await` can only be called in a coroutine")
+  assert(thread ~= nil, "[async.nvim] `await` can only be called in a coroutine")
   local scheduled_promise = vim.schedule_wrap(promise)
   local resolve = vim.schedule_wrap(function(...) safe_resume(thread, ...) end)
   scheduled_promise(resolve)
@@ -63,7 +66,7 @@ end
 --- @param on_iteration fun(control_var: ControlVar, ...):nil
 --- @param opts? ThrottledIteratorOpts
 M.throttled_iterator = function(iterator_factory, on_iteration, opts)
-  return M.new_promise(function(resolve)
+  local promise = M.async(function()
     opts = opts or {}
     local threshold_ns = opts.threshold_ns or (10 * 1000000)
     local should_cancel = opts.should_cancel or (function() return false end)
@@ -81,39 +84,25 @@ M.throttled_iterator = function(iterator_factory, on_iteration, opts)
       end
     end
 
-    local function process()
-      local maybe_pause = create_throttle()
-
-      local iter_fn, invariant_state, control_var = iterator_factory()
-      while true do
-        if should_cancel() then
-          resolve()
-          return
-        end
-        maybe_pause()
-
-        local values = { iter_fn(invariant_state, control_var), }
-        control_var = values[1]
-
-        if control_var == nil then
-          resolve()
-          return
-        end
-
-        on_iteration(unpack(values))
+    local maybe_pause = create_throttle()
+    local iter_fn, invariant_state, control_var = iterator_factory()
+    while true do
+      if should_cancel() then
+        return nil
       end
+      maybe_pause()
+
+      local values = { iter_fn(invariant_state, control_var), }
+      control_var = values[1]
+
+      if control_var == nil then
+        return nil
+      end
+
+      on_iteration(unpack(values))
     end
-
-    safe_resume(coroutine.create(process))
   end)
-end
-
---- @param level vim.log.levels
---- @param msg string
---- @param ... any
-local notify = function(level, msg, ...)
-  msg = "[async.nvim]: " .. msg
-  vim.notify(msg:format(...), level)
+  return promise()
 end
 
 return M
