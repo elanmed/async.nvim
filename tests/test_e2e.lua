@@ -35,6 +35,7 @@ T["await()"]["errors when called outside coroutine"] = function()
   local result = { pcall(M.await, promise), }
   eq(result[1], false)
   eq(result[2]:find "`await` can only be called in a coroutine" ~= nil, true)
+  eq(result[2]:find "Ensure the surrounding function is wrapped in a `make_spawn` or a `make_async`" ~= nil, true)
 end
 
 T["await()"]["works inside async function"] = function()
@@ -276,9 +277,11 @@ T["throttled_iterator()"]["iterates over all values"] = function()
         if n < 3 then return n + 1 end
       end, nil, 0
     end,
-    function(n)
-      seen[#seen + 1] = n
-    end
+    {
+      on_iteration = function(n)
+        seen[#seen + 1] = n
+      end,
+    }
   )
 
   local resolve = function() done = true end
@@ -297,9 +300,11 @@ T["throttled_iterator()"]["calls on_iteration with control variable"] = function
         if n < 2 then return n + 1, "x" .. (n + 1) end
       end, nil, 0
     end,
-    function(control_var, extra)
-      calls[#calls + 1] = { control_var, extra, }
-    end
+    {
+      on_iteration = function(control_var, extra)
+        calls[#calls + 1] = { control_var, extra, }
+      end,
+    }
   )
 
   local resolve = function() done = true end
@@ -318,10 +323,12 @@ T["throttled_iterator()"]["respects threshold_ns"] = function()
         if n < 3 then return n + 1 end
       end, nil, 0
     end,
-    function(n)
-      seen[#seen + 1] = n
-    end,
-    { threshold_ns = 0, }
+    {
+      on_iteration = function(n)
+        seen[#seen + 1] = n
+      end,
+      threshold_ns = 0,
+    }
   )
 
   local resolve = function() done = true end
@@ -348,11 +355,13 @@ T["throttled_iterator()"]["cancels when should_cancel returns true"] = function(
         if n < 5 then return n + 1 end
       end, nil, 0
     end,
-    function(n)
-      seen[#seen + 1] = n
-      count = count + 1
-    end,
-    { should_cancel = function() return count >= 2 end, }
+    {
+      on_iteration = function(n)
+        seen[#seen + 1] = n
+        count = count + 1
+      end,
+      should_cancel = function() return count >= 2 end,
+    }
   )
 
   local resolve = function() done = true end
@@ -370,7 +379,7 @@ T["throttled_iterator()"]["resolves when iteration completes"] = function()
         if n < 3 then return n + 1 end
       end, nil, 0
     end,
-    function() end
+    { on_iteration = function() end }
   )
 
   local resolve = function() done = true end
@@ -388,8 +397,10 @@ T["throttled_iterator()"]["resolves when cancelled"] = function()
         if n < 5 then return n + 1 end
       end, nil, 0
     end,
-    function() end,
-    { should_cancel = function() return true end, }
+    {
+      on_iteration = function() end,
+      should_cancel = function() return true end,
+    }
   )
 
   local resolve = function() done = true end
@@ -408,8 +419,10 @@ T["throttled_iterator()"]["rejects when on_iteration throws after yield"] = func
         if n < 1 then return n + 1 end
       end, nil, 0
     end,
-    function() error "iter boom" end,
-    { threshold_ns = 0, }
+    {
+      on_iteration = function() error "iter boom" end,
+      threshold_ns = 0,
+    }
   )
 
   promise(function() end, function(e)
