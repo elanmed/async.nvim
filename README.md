@@ -4,7 +4,7 @@ A tiny set of async primitives for Neovim plugins. ~125 lines of source code, ~4
 
 ## Promises as functions
 
-In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` callback and an optional `reject` callback for errors:
+In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` and (optional) `reject` callback:
 
 ```lua
 local promise = function(resolve, reject)
@@ -30,32 +30,33 @@ local promise = from_executor(function(resolve)
 end)
 ```
 
-If an async function throws, its promise rejects with that error, and `await` re-raises it so it can be caught with `pcall` inside another async function.
-
 ## Async functions
 
-In JavaScript, an `async` function has two properties we care about:
+In JavaScript, an `async` function has two properties important to us:
 
-1. It returns a promise
-2. You can use `await` inside it
+1. It returns a promise object
+2. You can use the `await` keyword within it
 
-This plugin uses the same terms.
+In this plugin, I apply the same two properties to our async functions (the return value of `make_async`):
+
+1. It returns a promise (a function that takes in `resolve` and `reject`)
+2. You can use the `await` function within it - more on that below
 
 ## `make_async`
 
-`make_async` takes a plain function and returns an async function — one that returns a promise and resolves with its return value (#1 from above):
+`make_async` takes a plain function and returns an async function — one that returns a promise.
 
 ```lua
 local add = make_async(function(a, b)
   return a + b
 end)
 
-local promise = add(3, 4) -- a promise
+local promise = add(3, 4)
 ```
 
 ## `await`
 
-`await` takes a promise and returns its resolved value. It must run inside a coroutine, which is exactly what `make_async` provides (#2 from above):
+`await` takes a promise and returns its resolved value. It must run inside a coroutine — that's property #2 from above:
 
 ```lua
 local add = make_async(function(a, b)
@@ -69,7 +70,8 @@ end)
 local compute = make_async(function()
   local add_promise = add(3, 4)
   local sum = await(add_promise)
-  return await(double(sum))
+  local double_promise = double(sum)
+  return await(double_promise)
 end)
 ```
 
@@ -78,36 +80,120 @@ end)
 `make_spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
 
 ```lua
-local run = make_spawn(function()
+local spawn = make_spawn(function()
   vim.print(await(compute())) -- 14
 end)
-run()
+spawn()
+```
+
+With just `make_async`, the same thing looks like this:
+
+```lua
+local async_fn = make_async(function()
+  vim.print(await(compute())) -- 14
+end)
+local promise = async_fn()
+local resolve = function() end
+promise(resolve)
 ```
 
 In other words: `make_async` gives you a promise to await, `make_spawn` is fire-and-forget.
+
+## Error handling
+
+Errors propagate through promises and `await`, so they can be caught with `pcall` in the same place you'd normally handle them.
+
+### Async functions throw
+
+A function wrapped in `make_async` runs in a coroutine. If it throws, its promise rejects:
+
+```lua
+local boom = make_async(function()
+  error("boom")
+end)
+
+local spawn = make_spawn(function()
+  local ok, err = pcall(await, boom())
+  vim.print(ok)  -- false
+  vim.print(err) -- boom
+end)
+spawn()
+```
+
+### Promise executors throw
+
+The same happens if the executor passed to `from_executor` throws:
+
+```lua
+local promise = from_executor(function(resolve)
+  error("executor boom")
+end)
+
+local spawn = make_spawn(function()
+  local ok, err = pcall(await, promise)
+  vim.print(ok)  -- false
+  vim.print(err) -- executor boom
+end)
+spawn()
+```
+
+### Without `await`
+
+If you call a promise directly without a `reject` handler, a rejection raises the error:
+
+```lua
+local promise = from_executor(function(resolve)
+  error("boom")
+end)
+local resolve = function() end
+local ok, err = pcall(promise, resolve)
+vim.print(ok)  -- false
+vim.print(err) -- boom
+```
+
+`make_spawn` discards the result but not the error, so an uncaught error is raised the same way:
+
+```lua
+local spawn = make_spawn(function()
+  error("boom")
+end)
+local ok, err = pcall(spawn)
+vim.print(ok)  -- false
+vim.print(err) -- boom
+```
 
 ## `throttled_iterator`
 
 For processing large lists without blocking the UI, `throttled_iterator` iterates in batches and yields back to the main thread between batches:
 
 ```lua
-local promise = throttled_iterator(
-  function()
-    return function(_, n)
-      if n < 3 then return n + 1 end
-    end, nil, 0
-  end,
-  function(n)
-    vim.print(n)
-  end
-)
+--- @class ThrottledIteratorOpts<ControlVar>
+--- @field threshold_ns? number The minimum time in nanoseconds between yields to the main loop. Defaults to 10ms.
+--- @field should_cancel? fun():boolean Called before each iteration; return true to stop early. Defaults to always returning false.
+--- @field on_iteration fun(control_var: ControlVar, ...):nil Called for each item with the control variable and the iterator values.
 
-promise(function()
-  vim.print("done")
-end)
+--- @generic InvariantState, ControlVar
+--- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
+--- @param opts ThrottledIteratorOpts<ControlVar>
+--- @return Promise<nil>
+M.throttled_iterator = function(iterator_factory, opts)
+-- ...
+end
 ```
 
-Options:
+Example:
 
-- `threshold_ns`: how long to process before yielding (default: 10ms)
-- `should_cancel`: a function returning `true` to stop early
+```lua
+local lines = { "first", "second", "third" }
+
+local spawn = make_spawn(function()
+  vim.print("before")
+  await(throttled_iterator(ipairs(lines), {
+    on_iteration = function(i, line)
+      vim.print(i, line)
+    end,
+  }))
+  vim.print("after")
+end)
+spawn()
+```
