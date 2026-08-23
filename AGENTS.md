@@ -19,4 +19,5 @@ A minimal Neovim plugin to
 ## Style preferences
 
 - Use Lua long strings (`[[...]]`) for multi-line string literals instead of escaped `\n`.
+- Do not declare multiple variables on one line — use one `local` per line.
 - In tests, avoid raw `child.lua` strings — they are prone to bugs. If you must use a `child.lua` string, make a helper function that takes arguments rather than embedding logic inline.
