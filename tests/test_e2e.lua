@@ -30,10 +30,6 @@ local T = new_set {
   },
 }
 
-T["dummy"] = function()
-  eq(true, true)
-end
-
 T["await()"] = new_set()
 
 T["await()"]["returns resolved value"] = function()
@@ -121,9 +117,9 @@ T["throttled_iterator()"]["resolves when iteration completes"] = function() end
 
 T["throttled_iterator()"]["resolves when cancelled"] = function() end
 
-T["overall"] = new_set()
+T["integration"] = new_set()
 
-T["overall"]["awaits twice inside spawned async function"] = function()
+T["integration"]["awaits async and callback promises inside spawn"] = function()
   eq(child.lua_func(function()
     local result, done = nil, false
 
@@ -135,16 +131,21 @@ T["overall"]["awaits twice inside spawned async function"] = function()
       return value * 2
     end)
 
+    local deferred = M.new_promise(function(resolve)
+      vim.schedule(function() resolve(10) end)
+    end)
+
     M.spawn(function()
       local sum = M.await(add(3, 4))
       local doubled = M.await(double(sum))
-      result = { sum, doubled, }
+      local extra = M.await(deferred)
+      result = { sum, doubled, extra, }
       done = true
     end)()
 
     vim.wait(1000, function() return done end)
     return result
-  end), { 7, 14, })
+  end), { 7, 14, 10, })
 end
 
 return T
