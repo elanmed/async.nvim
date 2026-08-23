@@ -23,4 +23,4 @@ docs:
 	./deps/ts-vimdoc.nvim/scripts/docgen.sh README.md doc/async.txt async
 	nvim --headless -c "helptags doc/" -c "qa"
 
-deploy: test lint docs
+deploy: test lint docs snapshot
