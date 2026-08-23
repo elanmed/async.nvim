@@ -41,6 +41,60 @@ M.await = function(promise)
   return coroutine.yield()
 end
 
+--- @class ThrottledIteratorOpts
+--- @field on_complete? fun():nil
+--- @field threshold_ns? number
+--- @field should_cancel? fun():boolean
+
+--- @generic InvariantState, ControlVar
+--- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
+--- @param on_iteration fun(control_var: ControlVar, ...):nil
+--- @param opts? ThrottledIteratorOpts
+M.throttled_iterator = function(iterator_factory, on_iteration, opts)
+  opts = opts or {}
+  local threshold_ns = opts.threshold_ns or (10 * 1000000)
+  local on_complete = opts.on_complete or (function() end)
+  local should_cancel = opts.should_cancel or (function() return false end)
+
+  local function create_throttle()
+    local last_yield = vim.uv.hrtime()
+    return function()
+      local now = vim.uv.hrtime()
+      if (now - last_yield) >= threshold_ns then
+        last_yield = now
+        local thread = coroutine.running()
+        vim.schedule(function() safe_resume(thread) end)
+        coroutine.yield()
+      end
+    end
+  end
+
+  local function process()
+    local maybe_pause = create_throttle()
+
+    local iter_fn, invariant_state, control_var = iterator_factory()
+    while true do
+      if should_cancel() then
+        on_complete()
+        return
+      end
+      maybe_pause()
+
+      local values = { iter_fn(invariant_state, control_var), }
+      control_var = values[1]
+
+      if control_var == nil then
+        on_complete()
+        return
+      end
+
+      on_iteration(unpack(values))
+    end
+  end
+
+  safe_resume(coroutine.create(process))
+end
+
 -- ====================
 -- Misc utils
 -- ====================
