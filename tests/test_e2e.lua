@@ -38,7 +38,7 @@ T["await()"]["errors when called outside coroutine"] = function()
 end
 
 T["await()"]["works inside async function"] = function()
-  local promise = M.make_async(function()
+  local async_fn = M.make_async(function()
     local inner_promise = M.from_executor(function(resolve) resolve(42) end)
     return M.await(inner_promise)
   end)
@@ -46,7 +46,8 @@ T["await()"]["works inside async function"] = function()
   local result = nil
   local done = false
   coroutine.wrap(function()
-    result = { M.await(promise()), }
+    local promise = async_fn()
+    result = { M.await(promise), }
     done = true
   end)()
   vim.wait(10, function() return done end)
@@ -138,7 +139,8 @@ T["make_async()"] = new_set()
 T["make_async()"]["resolves with return value"] = function()
   local value = nil
   local done = false
-  local promise = M.make_async(function(a, b) return a + b end)(3, 4)
+  local add = M.make_async(function(a, b) return a + b end)
+  local promise = add(3, 4)
   promise(function(v)
     value = v
     done = true
@@ -149,7 +151,8 @@ end
 T["make_async()"]["resolves with multiple return values"] = function()
   local values = nil
   local done = false
-  local promise = M.make_async(function() return 1, 2, 3 end)()
+  local async_fn = M.make_async(function() return 1, 2, 3 end)
+  local promise = async_fn()
   promise(function(...)
     values = { ..., }
     done = true
@@ -160,7 +163,8 @@ end
 T["make_async()"]["rejects when fn throws"] = function()
   local err = nil
   local done = false
-  local promise = M.make_async(function() error "boom" end)()
+  local bad = M.make_async(function() error "boom" end)
+  local promise = bad()
   promise(function() end, function(e)
     err = e
     done = true
@@ -169,7 +173,8 @@ T["make_async()"]["rejects when fn throws"] = function()
 end
 
 T["make_async()"]["rethrows when no reject passed"] = function()
-  local promise = M.make_async(function() error "boom" end)()
+  local bad = M.make_async(function() error "boom" end)
+  local promise = bad()
   local result = { pcall(promise, function() end), }
   eq(result[1], false)
   eq(result[2]:find "boom" ~= nil, true)
@@ -395,13 +400,14 @@ T["integration"]["awaits async and callback promises inside make_spawn"] = funct
     vim.schedule(function() resolve(10) end)
   end)
 
-  M.make_spawn(function()
+  local spawn = M.make_spawn(function()
     local sum = M.await(add(3, 4))
     local doubled = M.await(double(sum))
     local extra = M.await(deferred)
     result = { sum, doubled, extra, }
     done = true
-  end)()
+  end)
+  spawn()
 
   vim.wait(10, function() return done end)
   eq(result, { 7, 14, 10, })
