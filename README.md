@@ -12,10 +12,10 @@ local promise = function(resolve)
 end
 ```
 
-`new_promise` helps formalize the idea:
+`from_executor` helps formalize the idea:
 
 ```lua
-local promise = new_promise(function(resolve)
+local promise = from_executor(function(resolve)
   resolve(42)
 end)
 ```
@@ -23,41 +23,41 @@ end)
 And it's useful for bridging callback-style APIs:
 
 ```lua
-local delayed = new_promise(function(resolve)
+local promise = from_executor(function(resolve)
   vim.defer_fn(function()
     resolve("done")
   end, 100)
 end)
 ```
 
-## `async`
+## `make_async`
 
-`async` turns a plain function into an async function — one that returns (my definition of) a `promise` which automatically resolves with its return value:
+In JavaScript, an `async` function is one which returns a promise - we'll use the same terminology here.
+
+`make_async` takes a callback argument and transforms it, returning a new function. This new function is async - it returns (my definition of) a promise.
 
 ```lua
-local add = async(function(a, b)
+local add = make_async(function(a, b)
   return a + b
 end)
 
 local promise = add(3, 4) -- a promise
 ```
 
-In other words, the `promise` returned by `async` does not need to take in a `resolve` callback argument.
-
 ## `await`
 
-`await` takes a promise and returns its resolved value. It must be called inside a coroutine — which is exactly what `async` provides:
+`await` takes a promise and returns its resolved value. It must be called inside a coroutine — which is exactly what `make_async` provides:
 
 ```lua
-local add = async(function(a, b)
+local add = make_async(function(a, b)
   return a + b
 end)
 
-local double = async(function(value)
+local double = make_async(function(value)
   return value * 2
 end)
 
-local compute = async(function()
+local compute = make_async(function()
   local sum = await(add(3, 4))
   return await(double(sum))
 end)
@@ -81,7 +81,7 @@ spawn(function()
 end)()
 ```
 
-It' a the fire-and-forget primitive: `async` returns a promise for you to await, `spawn` starts the coroutine and moves on.
+It's the fire-and-forget primitive: `make_async` returns an async function; calling it returns a promise for you to await. `spawn` starts the coroutine and moves on.
 
 ## throttled_iterator
 
