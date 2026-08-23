@@ -112,6 +112,24 @@ T["await()"]["propagates non-string errors"] = function()
     { done = true, ok = false, code = 42, })
 end
 
+T["await()"]["catches sync throw from from_executor promise"] = function()
+  local bad_promise = M.from_executor(function() error "boom" end)
+  local outer_async_fn = M.make_async(function()
+    local ok, err = pcall(M.await, bad_promise)
+    return { ok = ok, boom = err and err:find "boom" ~= nil or false, }
+  end)
+
+  local result = nil
+  local done = false
+  local outer_promise = outer_async_fn()
+  outer_promise(function(v)
+    result = v
+    done = true
+  end, function() end)
+  vim.wait(10, function() return done end)
+  eq(result, { ok = false, boom = true, })
+end
+
 T["from_executor()"] = new_set()
 
 T["from_executor()"]["resolves synchronously"] = function()
@@ -134,6 +152,24 @@ T["from_executor()"]["passes reject callback"] = function()
     done = true
   end)
   eq({ done = done, msg = err, }, { done = true, msg = "nope", })
+end
+
+T["from_executor()"]["rejects when executor throws"] = function()
+  local err = nil
+  local done = false
+  local promise = M.from_executor(function() error "boom" end)
+  promise(function() end, function(e)
+    err = e
+    done = true
+  end)
+  eq({ done = done, boom = err and err:find "boom" ~= nil or false, }, { done = true, boom = true, })
+end
+
+T["from_executor()"]["rethrows when executor throws and no reject passed"] = function()
+  local promise = M.from_executor(function() error "boom" end)
+  local result = { pcall(promise, function() end), }
+  eq(result[1], false)
+  eq(result[2]:find "boom" ~= nil, true)
 end
 
 T["make_async()"] = new_set()
