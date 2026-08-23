@@ -59,7 +59,7 @@ In this plugin, I apply the same two properties to our async functions (the retu
 
 `make_async` takes a plain function and returns an async function — one that returns a promise.
 
-```
+```lua
 --- @alias AsyncFn<T> fun(...: any): Promise<T>
 --- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
 
