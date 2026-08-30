@@ -379,7 +379,7 @@ T["throttled_iterator()"]["resolves when iteration completes"] = function()
         if n < 3 then return n + 1 end
       end, nil, 0
     end,
-    { on_iteration = function() end }
+    { on_iteration = function() end, }
   )
 
   local resolve = function() done = true end
