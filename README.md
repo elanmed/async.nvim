@@ -14,7 +14,9 @@ In JavaScript, a promise is an object. In this plugin, I define a promise as a f
 
 ```lua
 local promise = function(resolve, reject)
-  resolve(42)
+  vim.defer_fn(function()
+    resolve("done")
+  end, 100)
 end
 ```
 
@@ -26,14 +28,6 @@ end
 --- @return Promise<T>
 M.from_executor = function(executor)
 ```
-
-```lua
-local promise = from_executor(function(resolve)
-  resolve(42)
-end)
-```
-
-And it's useful for bridging callback-style APIs:
 
 ```lua
 local promise = from_executor(function(resolve)
