@@ -1,4 +1,4 @@
-*async.txt*                                        Last change: 2026 August 23
+*async.txt*                                        Last change: 2026 August 29
 
 ==============================================================================
 Table of Contents                                    *async-table-of-contents*
@@ -36,7 +36,9 @@ function that takes a `resolve` and (optional) `reject` callback:
 <
 >lua
     local promise = function(resolve, reject)
-      resolve(42)
+      vim.defer_fn(function()
+        resolve("done")
+      end, 100)
     end
 <
 `from_executor` helps formalize the idea:
@@ -47,13 +49,6 @@ function that takes a `resolve` and (optional) `reject` callback:
     --- @return Promise<T>
     M.from_executor = function(executor)
 <
->lua
-    local promise = from_executor(function(resolve)
-      resolve(42)
-    end)
-<
-And it's useful for bridging callback-style APIs:
-
 >lua
     local promise = from_executor(function(resolve)
       vim.defer_fn(function()
@@ -83,7 +78,7 @@ return value of `make_async`):
 `make_async` takes a plain function and returns an async function — one that
 returns a promise.
 
->
+>lua
     --- @alias AsyncFn<T> fun(...: any): Promise<T>
     --- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
     
