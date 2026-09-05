@@ -1,13 +1,6 @@
-async-async-functions	async.txt	/*async-async-functions*
-async-async-functions-throw	async.txt	/*async-async-functions-throw*
 async-async.nvim	async.txt	/*async-async.nvim*
-async-await	async.txt	/*async-await*
-async-error-handling	async.txt	/*async-error-handling*
-async-make_async	async.txt	/*async-make_async*
-async-make_spawn	async.txt	/*async-make_spawn*
-async-promise-executors-throw	async.txt	/*async-promise-executors-throw*
-async-promises-as-functions	async.txt	/*async-promises-as-functions*
+async-requirements	async.txt	/*async-requirements*
 async-table-of-contents	async.txt	/*async-table-of-contents*
-async-throttled_iterator	async.txt	/*async-throttled_iterator*
-async-without-`await	async.txt	/*async-without-`await*
+async-throttled_iterator_async()	async.txt	/*async-throttled_iterator_async()*
+async-throttled_iterator_callback()	async.txt	/*async-throttled_iterator_callback()*
 async.txt	async.txt	/*async.txt*
