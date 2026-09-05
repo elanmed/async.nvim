@@ -132,20 +132,23 @@ T["throttled_iterator_async()"]["runs the callback API in async context"] = func
   local seen = {}
   local result = {}
   vim.async.run("", function()
-    result.value = M.throttled_iterator_async(function()
-      return function(_, n)
-        if n < 3 then
-          return n + 1
-        end
+    result.value = M.throttled_iterator_async {
+      iterator_factory = function()
+        return function(_, n)
+          if n < 3 then
+            return n + 1
+          end
+        end,
+          nil,
+          0
       end,
-        nil,
-        0
-    end, {
-      threshold_ns = math.huge,
-      on_iteration = function(n)
-        seen[#seen + 1] = n
-      end,
-    })
+      opts = {
+        threshold_ns = math.huge,
+        on_iteration = function(n)
+          seen[#seen + 1] = n
+        end,
+      },
+    }
     result.done = true
   end)
 
