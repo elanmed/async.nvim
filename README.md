@@ -6,9 +6,9 @@ Small async utilities for Neovim nightly. The plugin provides throttled iteratio
 
 - Neovim nightly with `vim.async` support
 
-## `throttled_iterator_callback()`
+## `throttled_iterator()`
 
-`throttled_iterator_callback()` consumes an iterator in batches and yields to the main loop when the configured time threshold is reached. This keeps large iterations from blocking the UI.
+`throttled_iterator()` consumes an iterator in batches and yields to the main loop when the configured time threshold is reached. Call it inside a `vim.async` context; it returns after iteration completes or is cancelled.
 
 ```lua
 ---@class ThrottledIteratorOpts<ControlVar>
@@ -16,11 +16,12 @@ Small async utilities for Neovim nightly. The plugin provides throttled iteratio
 ---@field should_cancel? fun(): boolean Called before each iteration; returning true stops iteration.
 ---@field on_iteration fun(control_var: ControlVar, ...): nil Called for every item.
 
----@generic InvariantState, ControlVar
----@param iterator_factory fun(): fun(invariant_state: InvariantState, control_var: ControlVar): ControlVar, InvariantState?, ControlVar?
----@param opts ThrottledIteratorOpts<ControlVar>
----@param callback fun(value: nil): nil Called after completion or cancellation.
-async.throttled_iterator_callback(iterator_factory, opts, callback)
+--- @class ThrottledIteratorArgs<InvariantState, ControlVar>
+--- @field iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
+--- @field threshold_ns? number
+--- @field should_cancel? fun(): boolean
+--- @field on_iteration fun(control_var: ControlVar, ...): nil
+async.throttled_iterator(opts)
 ```
 
 The iterator factory returns the iterator function, its invariant state, and its initial control variable. The iterator's first return value becomes the next control variable; iteration ends when it is `nil`.
@@ -28,59 +29,16 @@ The iterator factory returns the iterator function, its invariant state, and its
 ```lua
 local a = require("async")
 
-local values = { "first", "second", "third" }
-
 vim.async.run(function()
-  a.throttled_iterator_callback(
-    function()
-      return ipairs(values)
+  a.throttled_iterator {
+    iterator_factory = function()
+      return ipairs({ "one", "two", "three" })
     end,
-    {
-      on_iteration = function(index, value)
-        vim.print(index, value)
-      end,
-    },
-    function()
-      vim.print("done")
-    end
-  )
-end)
-```
-
-The callback receives `nil` both when iteration completes normally and when `should_cancel()` returns true. Cancellation is checked before each iteration, including the first one.
-
-Set `threshold_ns = 0` to yield before every iteration. The default threshold is 10 milliseconds:
-
-```lua
-a.throttled_iterator_callback(factory, {
-  threshold_ns = 5 * 1000000,
-  should_cancel = function()
-    return vim.g.stop_processing == true
-  end,
-  on_iteration = function(control_var, value)
-    -- Process value.
-  end,
-}, function()
-  -- Finished or cancelled.
-end)
-```
-
-## `throttled_iterator_async()`
-
-`throttled_iterator_async()` is an async wrapper around the callback API. Call it inside a `vim.async` context; it returns after iteration completes or is cancelled.
-
-```lua
-local a = require("async")
-
-vim.async.run(function()
-  a.throttled_iterator_async(function()
-    return ipairs({ "one", "two", "three" })
-  end, {
     on_iteration = function(index, value)
       vim.print(index, value)
     end,
-  })
+  }
 end)
 ```
 
-Use `throttled_iterator_callback()` when integrating with callback-based code, and `throttled_iterator_async()` when already inside a `vim.async` function.
+Cancellation is checked before each iteration, including the first one. Set `threshold_ns = 0` to yield before every iteration; the default threshold is 10 milliseconds.
