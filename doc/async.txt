@@ -8,7 +8,7 @@ Requirements ............................................ |async-requirements|
 `batched_iterator()` .............................. |async-batched_iterator()|
 
 ==============================================================================
-ASYNC.NVIM                                                  *async-async.nvim*
+`ASYNC.NVIM`                                                *async-async.nvim*
 
 
 Throttled and batched iterators built on Neovim's `vim.async` API. Iterate

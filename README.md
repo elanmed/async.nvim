@@ -1,4 +1,4 @@
-# async.nvim
+# `async.nvim`
 
 Throttled and batched iterators built on Neovim's `vim.async` API. Iterate without freezing the UI.
 
