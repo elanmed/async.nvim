@@ -1,229 +1,86 @@
 # async.nvim
 
-A tiny set of async primitives for Neovim plugins. ~125 lines of source code, ~450 lines of tests.
+Small async utilities for Neovim nightly. The plugin provides throttled iteration built on Neovim's `vim.async` API.
 
-## Promises as functions
+## Requirements
 
-In JavaScript, a promise is an object. In this plugin, I define a promise as a function that takes a `resolve` and (optional) `reject` callback:
+- Neovim nightly with `vim.async` support
+
+## `throttled_iterator_callback()`
+
+`throttled_iterator_callback()` consumes an iterator in batches and yields to the main loop when the configured time threshold is reached. This keeps large iterations from blocking the UI.
 
 ```lua
---- @alias Resolve<T> fun(...: T): nil
---- @alias Reject fun(err: any): nil
---- @alias Promise<T> fun(resolve: Resolve<T>, reject?: Reject): nil
+---@class ThrottledIteratorOpts<ControlVar>
+---@field threshold_ns? number Minimum time between yields, in nanoseconds. Defaults to 10 ms.
+---@field should_cancel? fun(): boolean Called before each iteration; returning true stops iteration.
+---@field on_iteration fun(control_var: ControlVar, ...): nil Called for every item.
+
+---@generic InvariantState, ControlVar
+---@param iterator_factory fun(): fun(invariant_state: InvariantState, control_var: ControlVar): ControlVar, InvariantState?, ControlVar?
+---@param opts ThrottledIteratorOpts<ControlVar>
+---@param callback fun(value: nil): nil Called after completion or cancellation.
+async.throttled_iterator_callback(iterator_factory, opts, callback)
 ```
 
-```lua
-local promise = function(resolve, reject)
-  vim.defer_fn(function()
-    resolve("done")
-  end, 100)
-end
-```
-
-`from_executor` helps formalize the idea:
+The iterator factory returns the iterator function, its invariant state, and its initial control variable. The iterator's first return value becomes the next control variable; iteration ends when it is `nil`.
 
 ```lua
---- @generic T
---- @param executor fun(resolve: Resolve<T>, reject?: Reject): nil
---- @return Promise<T>
-M.from_executor = function(executor)
-```
+local a = require("async")
 
-```lua
-local promise = from_executor(function(resolve)
-  vim.defer_fn(function()
-    resolve("done")
-  end, 100)
-end)
-```
+local values = { "first", "second", "third" }
 
-## Async functions
-
-In JavaScript, an `async` function has two properties important to us:
-
-1. It returns a promise object
-2. You can use the `await` keyword within it
-
-In this plugin, I apply the same two properties to our async functions (the return value of `make_async`):
-
-1. It returns a promise (a function that takes in `resolve` and `reject`)
-2. You can use the `await` function within it - more on that below
-
-## `make_async`
-
-`make_async` takes a plain function and returns an async function — one that returns a promise.
-
-```lua
---- @alias AsyncFn<T> fun(...: any): Promise<T>
---- @alias MakeAsync<T> fun(fn: fun(...: any): T): AsyncFn<T>
-
---- @generic T
---- @param fn fun(...: any): T
---- @return AsyncFn<T>
-M.make_async = function(fn)
-```
-
-```lua
-local add = make_async(function(a, b)
-  return a + b
-end)
-
-local promise = add(3, 4)
-```
-
-## `await`
-
-`await` takes a promise and returns its resolved value. It must run inside a coroutine — that's property #2 from above:
-
-```lua
---- @generic T
---- @param promise Promise<T>
---- @return T
-M.await = function(promise)
-```
-
-```lua
-local add = make_async(function(a, b)
-  return a + b
-end)
-
-local double = make_async(function(value)
-  return value * 2
-end)
-
-local compute = make_async(function()
-  local add_promise = add(3, 4)
-  local sum = await(add_promise)
-  local double_promise = double(sum)
-  return await(double_promise)
-end)
-```
-
-## `make_spawn`
-
-`make_spawn` also creates a coroutine so you can use `await`, but it runs the function immediately and discards the result:
-
-```lua
---- @alias SpawnFn fun(...: any): nil
---- @alias MakeSpawn fun(fn: fun(...: any): any): SpawnFn
-
---- @type MakeSpawn
-M.make_spawn = function(fn)
-```
-
-```lua
-local spawn = make_spawn(function()
-  vim.print(await(compute())) -- 14
-end)
-spawn()
-```
-
-With just `make_async`, the same thing looks like this:
-
-```lua
-local async_fn = make_async(function()
-  vim.print(await(compute())) -- 14
-end)
-local promise = async_fn()
-local resolve = function() end
-promise(resolve)
-```
-
-In other words: `make_async` gives you a promise to await, `make_spawn` is fire-and-forget.
-
-## Error handling
-
-Errors propagate through promises and `await`, so they can be caught with `pcall` in the same place you'd normally handle them.
-
-### Async functions throw
-
-A function wrapped in `make_async` runs in a coroutine. If it throws, its promise rejects:
-
-```lua
-local boom = make_async(function()
-  error("boom")
-end)
-
-local spawn = make_spawn(function()
-  local ok, err = pcall(await, boom())
-  vim.print(ok)  -- false
-  vim.print(err) -- boom
-end)
-spawn()
-```
-
-### Promise executors throw
-
-The same happens if the executor passed to `from_executor` throws:
-
-```lua
-local promise = from_executor(function(resolve)
-  error("executor boom")
-end)
-
-local spawn = make_spawn(function()
-  local ok, err = pcall(await, promise)
-  vim.print(ok)  -- false
-  vim.print(err) -- executor boom
-end)
-spawn()
-```
-
-### Without `await`
-
-If you call a promise directly without a `reject` handler, a rejection raises the error:
-
-```lua
-local promise = from_executor(function(resolve)
-  error("boom")
-end)
-local resolve = function() end
-local ok, err = pcall(promise, resolve)
-vim.print(ok)  -- false
-vim.print(err) -- boom
-```
-
-`make_spawn` discards the result but not the error, so an uncaught error is raised the same way:
-
-```lua
-local spawn = make_spawn(function()
-  error("boom")
-end)
-local ok, err = pcall(spawn)
-vim.print(ok)  -- false
-vim.print(err) -- boom
-```
-
-## `throttled_iterator`
-
-For processing large lists without blocking the UI, `throttled_iterator` iterates in batches and yields back to the main thread between batches:
-
-```lua
---- @class ThrottledIteratorOpts<ControlVar>
---- @field threshold_ns? number The minimum time in nanoseconds between yields to the main loop. Defaults to 10ms.
---- @field should_cancel? fun():boolean Called before each iteration; return true to stop early. Defaults to always returning false.
---- @field on_iteration fun(control_var: ControlVar, ...):nil Called for each item with the control variable and the iterator values.
-
---- @generic InvariantState, ControlVar
---- @param iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
---- @param opts ThrottledIteratorOpts<ControlVar>
---- @return Promise<nil>
-M.throttled_iterator = function(iterator_factory, opts)
-```
-
-Example:
-
-```lua
-local lines = { "first", "second", "third" }
-
-local spawn = make_spawn(function()
-  vim.print("before")
-  await(throttled_iterator(ipairs(lines), {
-    on_iteration = function(i, line)
-      vim.print(i, line)
+vim.async.run(function()
+  a.throttled_iterator_callback(
+    function()
+      return ipairs(values)
     end,
-  }))
-  vim.print("after")
+    {
+      on_iteration = function(index, value)
+        vim.print(index, value)
+      end,
+    },
+    function()
+      vim.print("done")
+    end
+  )
 end)
-spawn()
 ```
+
+The callback receives `nil` both when iteration completes normally and when `should_cancel()` returns true. Cancellation is checked before each iteration, including the first one.
+
+Set `threshold_ns = 0` to yield before every iteration. The default threshold is 10 milliseconds:
+
+```lua
+a.throttled_iterator_callback(factory, {
+  threshold_ns = 5 * 1000000,
+  should_cancel = function()
+    return vim.g.stop_processing == true
+  end,
+  on_iteration = function(control_var, value)
+    -- Process value.
+  end,
+}, function()
+  -- Finished or cancelled.
+end)
+```
+
+## `throttled_iterator_async()`
+
+`throttled_iterator_async()` is an async wrapper around the callback API. Call it inside a `vim.async` context; it returns after iteration completes or is cancelled.
+
+```lua
+local a = require("async")
+
+vim.async.run(function()
+  a.throttled_iterator_async(function()
+    return ipairs({ "one", "two", "three" })
+  end, {
+    on_iteration = function(index, value)
+      vim.print(index, value)
+    end,
+  })
+end)
+```
+
+Use `throttled_iterator_callback()` when integrating with callback-based code, and `throttled_iterator_async()` when already inside a `vim.async` function.
