@@ -23,7 +23,6 @@ local throttled_iterator_callback = function(opts, callback)
       if (now - last_yield) >= threshold_ns then
         last_yield = now
         vim.async.sleep(0)
-        coroutine.yield()
       end
     end
   end
