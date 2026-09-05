@@ -58,6 +58,18 @@ M.throttled_iterator_callback = function(iterator_factory, opts, callback)
   end
 end
 
-M.throttled_iterator_async = vim.async.wrap(3, M.throttled_iterator_callback)
+M.throttled_iterator_async = vim.async.wrap(
+  2,
+  --- @class ThrottledIteratorAsyncArgs<InvariantState, ControlVar>
+  --- @field iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState?, ControlVar?)
+  --- @field opts ThrottledIteratorOpts<ControlVar>
+
+  --- @generic InvariantState, ControlVar
+  --- @param args ThrottledIteratorAsyncArgs<InvariantState, ControlVar>
+  --- @param callback fun(arg:nil):nil
+  function(args, callback)
+    return M.throttled_iterator_callback(args.iterator_factory, args.opts, callback)
+  end
+)
 
 return M
