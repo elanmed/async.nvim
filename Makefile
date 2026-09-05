@@ -1,4 +1,4 @@
-.PHONY: dev clean test lint docs snapshot
+.PHONY: dev clean test lint format docs snapshot
 
 dev:
 	mkdir -p ~/.local/share/nvim/site/pack/dev/start/async.nvim
@@ -19,8 +19,15 @@ lint:
 	# https://luals.github.io/#install
 	lua-language-server --check=./lua --checklevel=Error
 
+format:
+	# https://github.com/JohnnyMorganz/StyLua#usage
+	stylua .
+
 docs:
+	mkdir -p ./doc
 	./deps/ts-vimdoc.nvim/scripts/docgen.sh README.md doc/async.txt async
 	nvim --headless -c "helptags doc/" -c "qa"
 
-deploy: test lint docs snapshot
+pre_push: test lint format
+
+deploy: test lint format docs snapshot
