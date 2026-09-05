@@ -3,8 +3,9 @@ local M = {}
 --- @class BatchedIteratorOpts<InvariantState, ControlVar>
 --- @field iterator_factory fun(): ((fun(invariant_state: InvariantState, control_var: ControlVar):ControlVar), InvariantState, ControlVar)
 --- @field batch_size? number
---- @field should_cancel fun():boolean
+--- @field should_cancel? fun():boolean
 --- @field on_iteration fun(entry: ControlVar):nil
+--- @field on_batch? fun():nil
 
 --- @generic InvariantState, ControlVar
 --- @param opts BatchedIteratorOpts<InvariantState, ControlVar>
@@ -17,11 +18,16 @@ local function batched_iterator_callback(opts, callback)
   end
 
   local iter_fn, invariant_state, control_var = opts.iterator_factory()
+  local on_batch = opts.on_batch or function() end
   local step
   step = function()
     local num_processed = 0
     while num_processed < batch_size do
       if should_cancel() then
+        if num_processed > 0 then
+          on_batch()
+        end
+        callback(nil)
         return
       end
 
@@ -29,14 +35,18 @@ local function batched_iterator_callback(opts, callback)
       control_var = values[1]
 
       if control_var == nil then
+        if num_processed > 0 then
+          on_batch()
+        end
         callback(nil)
         return
       end
 
-      on_iteration(unpack(values))
+      opts.on_iteration(unpack(values))
       num_processed = num_processed + 1
     end
 
+    on_batch()
     vim.schedule(step)
   end
   step()
